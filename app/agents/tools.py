@@ -7,8 +7,80 @@ from langchain.agents import create_agent
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, BrowserConfig
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from openai import OpenAI
+from app.config import settings, chroma_client
 
+openai_client = OpenAI(api_key=settings.openai_api_key)
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/README.md"
+
+@tool(description="Compares a job description against a resume using vector similarity search")
+def match_job_to_resume(job_description: str, resume_id: str) -> dict:
+    try:
+        # generate embedding for job description
+        embedding_response = openai_client.embeddings.create(
+            model="text-embedding-3-small",
+            input=[job_description]
+        )
+        job_embedding = embedding_response.data[0].embedding
+        collection = chroma_client.get_collection(name="resumes")
+        
+        results = collection.query(
+            query_embeddings=[job_embedding],
+            where={"resume_id": resume_id},
+            n_results=5,
+            include=["documents", "metadatas", "distances"]
+        )
+        
+        if not results['documents'] or not results['documents'][0]:
+            return {
+                "match_score": 0,
+                "matched_sections": [],
+                "message": f"No resume found with ID: {resume_id}"
+            }
+        
+        distances = results['distances'][0]
+        similarity_scores = []
+        for distance in distances:
+            distance = max(0, min(distance, 2))
+            # Convert: 0 distance = 100% match, 2 distance = 0% match
+            similarity = (1 - (distance / 2)) * 100
+            similarity_scores.append(max(0, similarity))  # Ensure non-negative
+        
+        # Weighted average (top matches matter more)
+        if len(similarity_scores) >= 3:
+            weights = [0.5, 0.3, 0.2][:len(similarity_scores)]
+            # Normalize weights
+            total_weight = sum(weights)
+            weights = [w / total_weight for w in weights]
+            weighted_score = sum(score * weight for score, weight in zip(similarity_scores, weights))
+        else:
+            weighted_score = sum(similarity_scores) / len(similarity_scores) if similarity_scores else 0
+        
+        # Format matched sections
+        matched_sections = []
+        for doc, metadata, score in zip(
+            results['documents'][0],
+            results['metadatas'][0],
+            similarity_scores
+        ):
+            matched_sections.append({
+                "text": doc,
+                "type": metadata.get("chunk_type", "unknown"),
+                "relevance": round(score, 1)
+            })
+        
+        return {
+            "match_score": round(weighted_score, 1),
+            "matched_sections": matched_sections,
+            "message": f"Successfully matched against {len(matched_sections)} resume sections"
+        }
+        
+    except Exception as e:
+        return {
+            "match_score": 0,
+            "matched_sections": [],
+            "error": f"Error during matching: {str(e)}"
+        }
 
 def _clean_job_description(markdown_text: str) -> str:
     """

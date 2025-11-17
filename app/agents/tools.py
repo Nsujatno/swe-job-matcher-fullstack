@@ -12,7 +12,8 @@ GITHUB_RAW_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Inte
 async def _crawl_job_async(url: str) -> str:
     browser_config = BrowserConfig(
         headless=True,
-        verbose=False 
+        verbose=False,
+        user_agent_mode="random",
     )
     # strips links and images for cleaning
     md_generator = DefaultMarkdownGenerator(
@@ -23,7 +24,11 @@ async def _crawl_job_async(url: str) -> str:
     )
     crawl_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
-        markdown_generator=md_generator
+        markdown_generator=md_generator,
+        # for workday websites, need delay
+        wait_for="css:[data-automation-id='jobPostingDescription']",
+        delay_before_return_html=2,
+        js_code="window.scrollTo(0, document.body.scrollHeight);",
     )
 
     async with AsyncWebCrawler(config=browser_config) as crawler:

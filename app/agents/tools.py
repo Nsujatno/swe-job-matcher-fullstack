@@ -5,6 +5,9 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from bs4 import BeautifulSoup
 from langchain.tools import tool
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 from typing import List, Dict
 
 GITHUB_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/README.md"
@@ -123,14 +126,268 @@ async def scrape_job_posting(url: str) -> str:
     except Exception as e:
         return f"Error scraping job posting: {str(e)}"
 
+@tool(description="Matches a resume to a job description using AI analysis")
+def match_resume_to_job(job_description: str, resume_text: str) -> Dict:
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+    prompt = ChatPromptTemplate.from_template(
+        """
+        You are a strict technical recruiter. Analyze the match between the Resume and Job Description.
+        
+        JOB DESCRIPTION:
+        {job_description}
+        
+        CANDIDATE RESUME:
+        {resume_text}
+        
+        STRICT INSTRUCTION:
+        You must prove your match score by citing SPECIFIC projects, roles, or tools from the resume. 
+        Do not just say "Candidate has experience." Say "Candidate used [Tool] in [Project Name]."
+        
+        EXAMPLE OF GOOD EVIDENCE:
+        "Job requires React -> Candidate used React in 'MeteorMate' project to build the dashboard."
+        "Job requires Cloud -> Candidate deployed 'Safe Speak' app using Firebase."
+
+        OUTPUT JSON ONLY:
+        {{
+            "score": <int 0-100>,
+            "reason": "<Summary of fit. Mention the candidate's actual specific project names here.>",
+            "evidence": [
+                "<Specific Requirement 1> -> <Specific Proof from Resume>",
+                "<Specific Requirement 2> -> <Specific Proof from Resume>",
+                "<Specific Requirement 3> -> <Specific Proof from Resume>"
+            ],
+            "missing_skills": ["<skill1>", "<skill2>"]
+        }}
+        """
+    )
+    
+    chain = prompt | llm | JsonOutputParser()
+    
+    try:
+        result = chain.invoke({
+            "job_description": job_description[:20000],
+            "resume_text": resume_text[:5000]
+        })
+        return result
+        
+    except Exception as e:
+        return {
+            "score": 0, 
+            "reason": f"Error: {str(e)}",
+            "evidence": [],
+            "missing_skills": []
+        }
+    
 # test script
-async def main():
-    job_url = "https://alsacstjude.wd1.myworkdayjobs.com/careersalsacstjude/job/Memphis-TN/Summer-2026-Intern---AI-Software-Engineer--Memphis--TN-_R0010291?utm_source=Simplify&ref=Simplify"
-    test = await scrape_job_posting(job_url)
-    print(test)
+
+JOB_DESCRIPTION="""
+# Careers at ALSAC
+
+Search for Jobs
+Summer 2026 Intern - AI Software Engineer (Memphis, TN) page is loaded
+## Summer 2026 Intern - AI Software Engineer (Memphis, TN)
+
+    Memphis, TN
+
+time type
+    Part time
+
+posted on
+    Posted Today
+
+job requisition id
+    R0010291
+# ****At ALSAC you do more than make a living; you make a difference.****
+## **_We like people who are different…because we’re different, too. As one of the world’s most iconic and respected nonprofits, we know what it’s like to stand out. That’s why we’re looking at you. Your background, perspective, and desire to make an impact set you apart. As we work to help St. Jude cure childhood cancer, we're calling on the game-changers, innovators and visionaries to join our family. Not just for the kids of St. Jude, but also for you. Because at ALSAC, we develop and celebrate our employees. So, bring your whole, authentic self and become part of our shared mission: Finding cures. Saving children.®_**
+## _Job Description_
+**Join the team behind one of the most trusted nonprofit brands in the world. ALSAC is the fundraising and awareness organization for St. Jude Children’s Research Hospital.**
+Our**paid summer internship program** _Finding cures. Saving children._
+**What You’ll**
+Over10 weeks,you’llHere’s
+  * **Meaningful Projects**
+
+
+  * **Mentorship & Collaboration**
+
+
+  * **Exclusive Chats** with ALSAC’s Executive Leadership Team
+
+
+  * **Intern Project** you’ll
+
+
+Named one of the**Top 100 Internship Programs in the U.S.** WayUp**impactful, collaborative, and inspiring**.
+**Internship Details:**
+  * **Dates** : June 1 – August 7, 2026
+
+
+  * **Schedule** : Full-time,40 hours/week (Monday–Friday)
+
+
+  * **Pay** : $14/hour
+
+
+  * **Location** : Headquarters Office in Memphis, TN
+
+
+**Application Process:**
+After yousubmit _stjude.org/alsacintern_ _intern@alsac.stjude.org_.
+**Qualifications:**
+  * Must be currently enrolled as an undergraduate or graduate student at an accredited college/university or May 2026 graduate
+
+
+  * Passionate about our mission
+
+
+  * Strong organizational skills to manage multiple projects simultaneously
+
+
+  * Must be 18 years of age or older
+
+
+**Internship Focus:**
+The Cultivation & Retention team is seeking an AI Software Engineering Intern to join our mission of enhancing donor engagement through intelligent, scalable, and user-friendly solutions. This internship offers hands-on experience in full-stack development with a focus on integrating AI technologies into modern web applications and backend systems.
+**Key Projects Include:**
+  * Building and enhancing donor self-service capabilities with AI-driven personalization.
+
+
+  * Developing secure and responsive UI components using**NextJS**
+
+
+  * Creating robust backend services using**Java** ,**Spring Boot** , and integrating**AI models**
+
+
+  * Designing and integrating APIs and microservices to support logged-in user features and AI-powered recommendations.
+
+
+**Daily Tasks:**
+  * Participate in Agile ceremonies including daily standups, sprint planning, and retrospectives.
+
+
+  * Collaborate with engineers, designers, and product managers to deliver new AI-enhanced features.
+
+
+  * Write clean, maintainable code and contribute to code reviews.
+
+
+  * Troubleshoot bugs andoptimize
+
+
+**Majors Preferred :**Master’sBachelor’s inComputer Science,Information Technology,Artificial Intelligence, or related fields.
+**Skills Preferred:**
+  * **Frontend** :NextJS, ReactJS, or similar UI technologies.
+
+
+  * **Backend** : Java, Spring Boot.
+
+
+  * **AI/ML** : Familiarity with Python, TensorFlow,PyTorch, or similar frameworks.
+
+
+  * Experience with REST APIs, Git, and Agile development practices.
+
+
+  * Strong problem-solving and communication skills.
+
+
+# **_Benefits & Perks_**
+## _The following Benefits & Perks apply to _Full-Time Roles_ _Only**.**__
+## _We’re dedicated to ensuring children and their families have every opportunity to enjoy life’s special moments. We’re also committed to giving our staff excellent benefits so they can do the same._
+  * Core Medical Coverage: (low cost low deductible Medical, Dental, and Vison Insurance plans)​
+  * 401K Retirement Plan with 7% Employer Contribution
+  * Exceptional Paid Time Off
+  * Maternity / Paternity Leave
+  * Infertility Treatment Program
+  * Adoption Assistance
+  * Education Assistance
+  * Enterprise Learning and Development
+  * And more
+
+
+**ALSAC is an equal employment opportunity employer.**
+ALSAC does not discriminate against any individual with regard to race, color, religion, sex, national origin, age, sexual orientation, gender identity, transgender status, disability, veteran status, genetic information or other protected status.
+**No Search Firms:**
+ALSAC does not accept unsolicited assistance from search firms for employment opportunities. All resumes submitted by search firms to any ALSAC employee or ALSAC representative via email, the internet or in any form and/or method without being contacted and approved by our Employee Experience team and without a valid written search agreement in place will result in no fee being paid if a referred candidate is hired by ALSAC.
+### Similar Jobs (5)
+#### Summer 2026 Intern - Web Software Engineer (Memphis, TN)
+
+locations
+    Memphis, TN
+
+time type
+    Part time
+
+posted on
+    Posted Today
+
+time left to apply
+    End Date: December 7, 2025 (18 days left to apply)
+#### Summer 2026 Intern - Partnerships (Memphis, TN)
+
+locations
+    Memphis, TN
+
+time type
+    Part time
+
+posted on
+    Posted Today
+
+time left to apply
+    End Date: December 7, 2025 (18 days left to apply)
+View All 5 Jobs
+### About ALSAC
+ALSAC (American Lebanese Syrian Associated Charities), exists to raise funds and awareness for St. Jude Children’s Research Hospital. Our staff is dynamic and diverse. Our skills are different, our professions are varied; but our mission is the same: support the lifesaving mission of St. Jude. Thanks to the work being done by ALSAC employees, the families of St. Jude patients never receive a bill for treatment, travel, housing or food. It’s more than a job; it’s a place where you can do what you love, and love why you do it.
+  * #1 Hospital Charity in the Nation
+  * #1 Health Non-Profit Brand of the Year
+  * 94% of Employees Agree ALSAC is a Great Place to Work
+  * Ranked a Top 10 Non-Profit Organization by Revenue
+
+
+Learn More
+Learn more about working at ALSAC by visiting our website.
+Read what employees have to say about us on Glassdoor.
+
+Read More
+
+  *   *   *
+"""
+
+TEST_RESUME = """
+NATHAN STUDENT
+Computer Science Undergraduate | Expected May 2027
+
+TECHNICAL SKILLS
+Languages: Python, JavaScript, TypeScript, C++, SQL
+Frontend: React.js, Next.js, Tailwind CSS, HTML5
+AI/ML: Pandas, NumPy, Scikit-learn, OpenAI API Integration
+Tools: Git, GitHub, VS Code, Vercel
+
+EXPERIENCE
+Frontend Developer Intern | Tech Startup
+- Built responsive web pages using Next.js and TypeScript, improving load times by 20%.
+- Collaborated with designers to implement UI components matching Figma designs.
+- Used Git for version control and participated in daily agile standups.
+
+PROJECTS
+AI Chatbot Assistant
+- Developed a chatbot using Python and the OpenAI API to help students organize schedules.
+- Implemented RAG (Retrieval Augmented Generation) to fetch data from school documents.
+
+E-Commerce Dashboard
+- Built a full-stack dashboard using React.js and Node.js.
+- Created REST APIs to handle user data and order history.
+"""
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    print("Analyzing Resume match...")
+    result = match_resume_to_job.invoke({
+        "job_description": JOB_DESCRIPTION, 
+        "resume_text": TEST_RESUME
+    })
+    
+    print(result)
 
 
 

@@ -1,9 +1,21 @@
 import requests
+import asyncio
+import re
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from bs4 import BeautifulSoup
 from langchain.tools import tool
 from typing import List, Dict
 
 GITHUB_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/README.md"
+
+NOISE_PATTERNS = [
+    re.compile(r'Skip to main content.*?(?=\n)', re.IGNORECASE),
+    re.compile(r'Sign In.*?(?=\n)', re.IGNORECASE),
+    re.compile(r'© \d{4}.*', re.IGNORECASE),
+    re.compile(r'Apply\s*locations.*', re.IGNORECASE),
+    re.compile(r'Follow Us.*', re.IGNORECASE),
+]
 
 @tool(description="This tool gets a certain amount of jobs from the github summer 2026 internships repo")
 def get_github_jobs(limit: int=3) -> List[Dict]:
@@ -70,11 +82,55 @@ def get_github_jobs(limit: int=3) -> List[Dict]:
     except Exception as e:
         return [{"Error": f"Failed to fetch jobs: {str(e)}"}]
 
+# cleans up the markdown file by removing any unneccesary info
+def _clean_job_description(markdown_text: str) -> str:    
+    cleaned = markdown_text
+    for pattern in NOISE_PATTERNS:
+        cleaned = pattern.sub('', cleaned)
+    
+    return cleaned.strip()
 
-# test = get_github_jobs()
-# print(test)
+async def _crawl_async(url: str) -> str:
+    # create browser config
+    browser_config = BrowserConfig(
+        headless=True,
+        verbose=False,
+    )
+    # create crawler config to wait for sites like workday to load
+    run_config = CrawlerRunConfig(
+        cache_mode=CacheMode.BYPASS,
+        delay_before_return_html=3.0,
+        markdown_generator=DefaultMarkdownGenerator(
+            options={"ignore_links": True, "ignore_images": True}
+        )
+    )
+    # create instance of async web crawler
+    async with AsyncWebCrawler(config=browser_config) as crawler:
+        # Run the crawler on a URL
+        result = await crawler.arun(url=url, config=run_config)
+        if result.success:
+            return result.markdown
+        else:
+            return f"Error scraping page: {result.error_message}"
 
+@tool(description="Scrapes a job posting based on a url to get its relevant info such as description, requirements, benefits, etc")
+async def scrape_job_posting(url: str) -> str:
+    try:
+        raw_markdown = await _crawl_async(url)
+        cleaned_text = _clean_job_description(raw_markdown)
+        return cleaned_text
+        
+    except Exception as e:
+        return f"Error scraping job posting: {str(e)}"
 
+# test script
+async def main():
+    job_url = "https://alsacstjude.wd1.myworkdayjobs.com/careersalsacstjude/job/Memphis-TN/Summer-2026-Intern---AI-Software-Engineer--Memphis--TN-_R0010291?utm_source=Simplify&ref=Simplify"
+    test = await scrape_job_posting(job_url)
+    print(test)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 
 

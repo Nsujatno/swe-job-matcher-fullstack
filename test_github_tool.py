@@ -10,71 +10,87 @@ job4 = "https://alsacstjude.wd1.myworkdayjobs.com/careersalsacstjude/job/Memphis
 resume_id = "4afe7d9b-1d99-426f-becd-ac94775182ec"
 resume_id_2 = "79e8ee7d-bcfe-4ce7-9526-d62de005b66e"
 
-job_description_1_workday = """
-### Job Description
-**Intern – Ultrasound Acoustics Engineering – Bothell, WA – Summer 2026**
+job_description_test = """
+## _Job Description_
+**Join the team behind one of the most trusted nonprofit brands in the world. ALSAC is the fundraising and awareness organization for St. Jude Children’s Research Hospital.**
+Our**paid summer internship program** _Finding cures. Saving children._
+**What You’ll**
+Over10 weeks,you’llHere’s
+  * **Meaningful Projects**
+  * **Mentorship & Collaboration**
+  * **Exclusive Chats** with ALSAC’s Executive Leadership Team
+  * **Intern Project** you’ll
+Named one of the**Top 100 Internship Programs in the U.S.** WayUp**impactful, collaborative, and inspiring**.
+**Internship Details:**
+  * **Dates** : June 1 – August 7, 2026
+  * **Schedule** : Full-time,40 hours/week (Monday–Friday)
+  * **Pay** : $14/hour
+  * **Location** : Headquarters Office in Memphis, TN
+**Application Process:**
+After yousubmit _stjude.org/alsacintern_ _intern@alsac.stjude.org_.
 
-Are you interested in an Internship opportunity with Philips? We welcome individuals who are currently pursuing an undergraduate (BS) and/or graduate (MS) degree to participate in 3 month paid intern opportunities at our site in Bothell, WA. Through this role you will gain meaningful, hands-on experience working for a HealthTech company.
+**Qualifications:**
+  * Must be currently enrolled as an undergraduate or graduate student at an accredited college/university or May 2026 graduate
+  * Passionate about our mission
 
-**Your role:**
-  * You will support North America signal path acoustic engineers by engaging in prototyping on GPU and testing activities related to real-time imaging applications, signal processing, beamforming, and advanced imaging algorithms.
-  * Analyses, designs, tests, codes, secures, debugs, modifies, deploys, integrates and maintains (system) software enhancements, test environment and/or new software in GPU environment.
+  * Strong organizational skills to manage multiple projects simultaneously
+  * Must be 18 years of age or older
+**Internship Focus:**
 
-  * Uses state-of-the-art technologies and practices. Interacts with users / product owners to define / adjust requirements and/or necessary modifications.
-  * Keeps abreast of technical developments and practices in own field through literature, courses/trainings, technical contacts, and competitive environment.
-  * Apply acoustic wave propagation in healthcare, develop signal processing theory to ultrasound system design.
-  * Participate in development and implementation of new ultrasound imaging capabilities: including development plans, algorithm design, integration strategy, and SW implementation.
-  * Participate in the design, development, and integration of new ultrasound systems and transducers.
-  * Develop and participate in medical ultrasound feasibility and research projects to support research and development.
+The Cultivation & Retention team is seeking an AI Software Engineering Intern to join our mission of enhancing donor engagement through intelligent, scalable, and user-friendly solutions. This internship offers hands-on experience in full-stack development with a focus on integrating AI technologies into modern web applications and backend systems.
+**Key Projects Include:**
+  * Building and enhancing donor self-service capabilities with AI-driven personalization.
+  * Developing secure and responsive UI components using**NextJS**
+  * Creating robust backend services using**Java** ,**Spring Boot** , and integrating**AI models**
+  * Designing and integrating APIs and microservices to support logged-in user features and AI-powered recommendations.
+**Daily Tasks:**
+  * Participate in Agile ceremonies including daily standups, sprint planning, and retrospectives.
+  * Collaborate with engineers, designers, and product managers to deliver new AI-enhanced features.
+  * Write clean, maintainable code and contribute to code reviews.
+  * Troubleshoot bugs andoptimize
+**Majors Preferred :**Master’sBachelor’s inComputer Science,Information Technology,Artificial Intelligence, or related fields.
 
-**You're the right fit if:**
-  * Pursuing BS or MS in Electrical Engineering, Biomedical Engineering, Aerospace Engineering, Physics, or Computer Science
+**Skills Preferred:**
+  * **Frontend** :NextJS, ReactJS, or similar UI technologies.
+  * **Backend** : Java, Spring Boot.
+  * **AI/ML** : Familiarity with Python, TensorFlow,PyTorch, or similar frameworks.
 
-  * GPU/CUDA experience
-  * Matlab, Python, R, or C++ programming languages
+  * Experience with REST APIs, Git, and Agile development practices.
 
-  * Experience in signal and / or image processing
+  * Strong problem-solving and communication skills.
+# **_Benefits & Perks_**
+## _The following Benefits & Perks apply to _Full-Time Roles_ _Only**.**__
+## _We’re dedicated to ensuring children and their families have every opportunity to enjoy life’s special moments. We’re also committed to giving our staff excellent benefits so they can do the same._
+  * Core Medical Coverage: (low cost low deductible Medical, Dental, and Vison Insurance plans)​
+  * 401K Retirement Plan with 7% Employer Contribution
+  * Exceptional Paid Time Off
+  * Maternity / Paternity Leave
+  * Infertility Treatment Program
+  * Adoption Assistance
+  * Education Assistance
+  * Enterprise Learning and Development
+  * And more
 
-  * Experience in AI and deep learning
-
-  * Demonstrate excellent written and verbal interpersonal skills
-
-  * Excellent problem-solving skills
-
-  * You must be able to successfully perform the following minimum Physical, Cognitive and Environmental job requirements with or without accommodation for this position.
-**How we work together**
-We believe that we are better together than apart. For our office-based teams, this means working in-person at least 3 days per week. Onsite roles require full-time presence in the company’s facilities. Field roles are most effectively done outside of the company’s main facilities, generally at the customers’ or suppliers’ locations.
-This is an office role.
-**About Philips**
-We are a health technology company. We built our entire company around the belief that every human matters, and we won't stop until everybody everywhere has access to the quality healthcare that we all deserve. Do the work of your life to help improve the lives of others.
-  * Learn more about our business.
-  * Discover our rich and exciting history.
-  * Learn more about our purpose.
-  * Learn more about our culture.
-**Philips Transparency Details**
-
-The hourly pay range for this position is $25.00 to $36.00, plus overtime eligible. The actual base pay offered may vary within the posted ranges depending on multiple factors including job-related knowledge/skills, experience, business needs, geographical location, and internal equity.
-Details about our benefits can be found here.
-At Philips, it is not typical for an individual to be hired at or near the top end of the range for their role and compensation decisions are dependent upon the facts and circumstances of each case.
-**Additional Information**
-US work authorization is a precondition of employment. The company will not consider candidates who require sponsorship for a work-authorized visa, now or in the future.
-Company relocation benefits _**will not**_ be provided for this position. For this position, you must reside in _**or**_ within commuting distance to Bothell, WA**.**
-This requisition is expected to stay active for 45 days but may close earlier if a successful candidate is selected or business necessity dictates. Interested candidates are encouraged to apply as soon as possible to ensure consideration.
-
-The hourly pay range for this position is $25.00 to $36.00, plus overtime eligible. The actual base pay offered may vary within the posted ranges depending on multiple factors including job-related knowledge/skills, experience, business needs, geographical location, and internal equity.
-Details about our benefits can be found here.
-At Philips, it is not typical for an individual to be hired at or near the top end of the range for their role and compensation decisions are dependent upon the facts and circumstances of each case.
-**Additional Information**
-US work authorization is a precondition of employment. The company will not consider candidates who require sponsorship for a work-authorized visa, now or in the future.
-Company relocation benefits _**will not**_ be provided for this position. For this position, you must reside in _**or**_ within commuting distance to Bothell, WA**.**
-This requisition is expected to stay active for 45 days but may close earlier if a successful candidate is selected or business necessity dictates. Interested candidates are encouraged to apply as soon as possible to ensure consideration.
+  * Strong problem-solving and communication skills.
+# **_Benefits & Perks_**
+## _The following Benefits & Perks apply to _Full-Time Roles_ _Only**.**__
+## _We’re dedicated to ensuring children and their families have every opportunity to enjoy life’s special moments. We’re also committed to giving our staff excellent benefits so they can do the same._
+  * Core Medical Coverage: (low cost low deductible Medical, Dental, and Vison Insurance plans)​
+  * 401K Retirement Plan with 7% Employer Contribution
+  * Exceptional Paid Time Off
+  * Maternity / Paternity Leave
+  * Infertility Treatment Program
+  * Adoption Assistance
+  * Education Assistance
+  * Enterprise Learning and Development
+  * And more
 """
 
 # result = diagnose_workday_site(job3)
 # print(result)
 
-job = scrape_job_posting.invoke(job4)
-print(job)
+# job = scrape_job_posting.invoke(job4)
+# print(job)
 
 # job = match_job_to_resume(job_description_1_workday, resume_id_2)
 # print(job)
@@ -102,3 +118,11 @@ print(job)
 # })
 
 # print(explanation)
+
+result = match_job_to_resume.invoke({
+    "job_description": job_description_test,
+    "resume_id": resume_id_2
+})
+
+print(f"Match Score: {result['match_score']}%")
+print(f"Message: {result['message']}")

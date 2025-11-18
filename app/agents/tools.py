@@ -10,6 +10,8 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from openai import OpenAI
 from app.config import settings, chroma_client
 
+job_cache = {}
+
 openai_client = OpenAI(api_key=settings.openai_api_key)
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/README.md"
 
@@ -76,66 +78,146 @@ def explain_job_match(
         else:
             return f"Limited match ({match_score}%). This role requires specialized skills that don't strongly align with your current background."
 
+@tool(description="Matches a job against resume using the cached full description")
+def match_job_to_resume_by_url(job_url: str, resume_id: str) -> dict:
+    # Retrieve full description from cache
+    job_description = job_cache.get(job_url)
+    
+    if not job_description:
+        return {
+            "match_score": 0,
+            "matched_sections": [],
+            "error": f"Job not found in cache. Please scrape it first: {job_url}"
+        }
+    
+    print(f"\n[MATCHING] Using cached job ({len(job_description)} chars) for {job_url[:50]}...")
+    
+    # Now use the full description
+    return match_job_to_resume.invoke({
+        "job_description": job_description,
+        "resume_id": resume_id
+    })
+
 @tool(description="Compares a job description against a resume using vector similarity search")
 def match_job_to_resume(job_description: str, resume_id: str) -> dict:
+    print("\n" + "="*60)
+    print("MATCH_JOB_TO_RESUME CALLED")
+    print("="*60)
+    print(f"Resume ID: {resume_id}")
+    print(f"Job Description Length: {len(job_description)} chars")
+    print(f"First 300 chars:\n{job_description[:300]}")
+    print(f"Last 200 chars:\n{job_description[-200:]}")
+    print("="*60 + "\n")
     try:
-        # generate embedding for job description
+        # Validate inputs
+        if not job_description or len(job_description) < 50:
+            return {
+                "match_score": 0,
+                "matched_sections": [],
+                "error": "Job description is too short or empty"
+            }
+        
+        # Step 1: Extract key sections from job description
+        job_chunks = _extract_job_chunks(job_description)
+        
+        if not job_chunks:
+            return {
+                "match_score": 0,
+                "matched_sections": [],
+                "error": "Could not extract meaningful sections from job description"
+            }
+        
+        # Step 2: Generate embeddings for each chunk
         embedding_response = openai_client.embeddings.create(
             model="text-embedding-3-small",
-            input=[job_description]
+            input=job_chunks  # Multiple chunks at once
         )
-        job_embedding = embedding_response.data[0].embedding
+        job_embeddings = [item.embedding for item in embedding_response.data]
+        
+        # Step 3: Query ChromaDB with each chunk
         collection = chroma_client.get_collection(name="resumes")
         
-        results = collection.query(
-            query_embeddings=[job_embedding],
-            where={"resume_id": resume_id},
-            n_results=5,
-            include=["documents", "metadatas", "distances"]
-        )
+        all_matches = []
+        for chunk_embedding, chunk_text in zip(job_embeddings, job_chunks):
+            results = collection.query(
+                query_embeddings=[chunk_embedding],
+                where={"resume_id": resume_id},
+                n_results=5,  # Increased to 5 per chunk
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            if results['documents'] and results['documents'][0]:
+                all_matches.append({
+                    "chunk": chunk_text[:100],
+                    "distances": results['distances'][0],
+                    "documents": results['documents'][0],
+                    "metadatas": results['metadatas'][0]
+                })
         
-        if not results['documents'] or not results['documents'][0]:
+        if not all_matches:
             return {
                 "match_score": 0,
                 "matched_sections": [],
                 "message": f"No resume found with ID: {resume_id}"
             }
         
-        distances = results['distances'][0]
-        similarity_scores = []
-        for distance in distances:
-            distance = max(0, min(distance, 2))
-            # Convert: 0 distance = 100% match, 2 distance = 0% match
-            similarity = (1 - (distance / 2)) * 100
-            similarity_scores.append(max(0, similarity))  # Ensure non-negative
+        # Step 4: Calculate scores with skill boosting
+        scored_matches = []
+        for match in all_matches:
+            for distance, metadata in zip(match['distances'], match['metadatas']):
+                distance = max(0, min(distance, 2))
+                similarity = (1 - (distance / 2)) * 100
+                
+                # BOOST: Skills chunks get 20% bonus
+                if metadata.get('chunk_type') == 'skills':
+                    similarity = min(100, similarity * 1.2)
+                
+                scored_matches.append({
+                    "score": max(0, similarity),
+                    "type": metadata.get('chunk_type', 'unknown')
+                })
         
-        # Weighted average (top matches matter more)
-        if len(similarity_scores) >= 3:
-            weights = [0.5, 0.3, 0.2][:len(similarity_scores)]
-            # Normalize weights
+        # Sort and take top scores
+        scored_matches.sort(key=lambda x: x['score'], reverse=True)
+        top_scores = [m['score'] for m in scored_matches[:7]]
+        
+        # Aggressive weighting - top matches matter most
+        if len(top_scores) >= 3:
+            weights = [0.4, 0.25, 0.15, 0.1, 0.05, 0.03, 0.02][:len(top_scores)]
             total_weight = sum(weights)
             weights = [w / total_weight for w in weights]
-            weighted_score = sum(score * weight for score, weight in zip(similarity_scores, weights))
+            weighted_score = sum(score * weight for score, weight in zip(top_scores, weights))
         else:
-            weighted_score = sum(similarity_scores) / len(similarity_scores) if similarity_scores else 0
+            weighted_score = sum(top_scores) / len(top_scores) if top_scores else 0
         
-        # Format matched sections
+        # Step 5: Collect matched sections (same as before)
+        seen = set()
         matched_sections = []
-        for doc, metadata, score in zip(
-            results['documents'][0],
-            results['metadatas'][0],
-            similarity_scores
-        ):
-            matched_sections.append({
-                "text": doc,
-                "type": metadata.get("chunk_type", "unknown"),
-                "relevance": round(score, 1)
-            })
+        for match in all_matches:
+            for doc, metadata, dist in zip(match['documents'], match['metadatas'], match['distances']):
+                doc_hash = hash(doc)
+                if doc_hash not in seen:
+                    seen.add(doc_hash)
+                    dist = max(0, min(dist, 2))
+                    similarity = (1 - (dist / 2)) * 100
+                    
+                    # Apply same boost to displayed relevance
+                    if metadata.get('chunk_type') == 'skills':
+                        similarity = min(100, similarity * 1.2)
+                    
+                    matched_sections.append({
+                        "text": doc,
+                        "type": metadata.get("chunk_type", "unknown"),
+                        "relevance": round(max(0, similarity), 1)
+                    })
+        
+        matched_sections.sort(key=lambda x: x['relevance'], reverse=True)
+        matched_sections = matched_sections[:5]
         
         return {
             "match_score": round(weighted_score, 1),
             "matched_sections": matched_sections,
-            "message": f"Successfully matched against {len(matched_sections)} resume sections"
+            "message": f"Analyzed {len(job_chunks)} job sections against resume"
         }
         
     except Exception as e:
@@ -144,6 +226,74 @@ def match_job_to_resume(job_description: str, resume_id: str) -> dict:
             "matched_sections": [],
             "error": f"Error during matching: {str(e)}"
         }
+
+
+def _extract_job_chunks(job_description: str) -> list:
+    """
+    Extracts key sections from a job description for better matching.
+    Returns a list of focused text chunks.
+    """
+    chunks = []
+    
+    # Keywords that indicate important sections
+    important_sections = [
+        'requirements', 'qualifications', 'skills', 'experience',
+        'responsibilities', 'duties', 'key projects', 'daily tasks',
+        'what you', 'you will', 'preferred', 'required', 'must have',
+        'looking for', 'seeking', 'candidate will'
+    ]
+    
+    lines = job_description.split('\n')
+    current_chunk = []
+    capturing = False
+    
+    for line in lines:
+        line_lower = line.lower().strip()
+        
+        # Skip noise sections
+        if any(skip in line_lower for skip in ['benefits', 'perks', 'equal opportunity', 'application process', 'about us', 'our mission']):
+            if current_chunk:
+                chunks.append('\n'.join(current_chunk))
+                current_chunk = []
+            capturing = False
+            continue
+        
+        # Start capturing at important headers
+        if any(keyword in line_lower for keyword in important_sections):
+            if current_chunk:
+                chunks.append('\n'.join(current_chunk))
+            current_chunk = [line]
+            capturing = True
+        
+        # Continue capturing
+        elif capturing and line.strip():
+            current_chunk.append(line)
+            
+            # Break chunk if it gets too long (aim for ~300 words per chunk)
+            if len('\n'.join(current_chunk)) > 1500:
+                chunks.append('\n'.join(current_chunk))
+                current_chunk = []
+                capturing = False
+    
+    # Add last chunk
+    if current_chunk:
+        chunks.append('\n'.join(current_chunk))
+    
+    # If no chunks found, fall back to extracting bullet points
+    if not chunks:
+        bullets = [line.strip() for line in lines if line.strip().startswith(('*', '-', '•'))]
+        if bullets:
+            # Group bullets into chunks of 10
+            for i in range(0, len(bullets), 10):
+                chunk = '\n'.join(bullets[i:i+10])
+                chunks.append(chunk)
+    
+    # Last resort: split into paragraphs
+    if not chunks:
+        paragraphs = [p.strip() for p in job_description.split('\n\n') if len(p.strip()) > 100]
+        chunks = paragraphs[:5]  # Take first 5 substantial paragraphs
+    
+    return chunks[:8]  # Max 8 chunks to avoid API limits
 
 def _clean_job_description(markdown_text: str) -> str:
     """
@@ -250,8 +400,10 @@ def scrape_job_posting(url: str) -> str:
     raw_markdown = asyncio.run(_crawl_job_async(url))
 
     cleaned = _clean_job_description(raw_markdown)
+    job_cache[url] = cleaned
     
-    return cleaned
+    return f"[Job cached as {url}]\n\n{cleaned[:500]}...\n\n[Full description cached for matching]"
+    # return cleaned
 
 @tool(description="Scrapes the first 3 job postings from the Summer2026-Internships GitHub README. Returns a list of dicts: {company, title, link}")
 def get_first_3_github_jobs() -> list:
@@ -321,32 +473,48 @@ def get_first_3_github_jobs() -> list:
 def create_job_agent():
     llm = ChatOpenAI(
         model="gpt-4o-mini", 
-        temperature=0
+        temperature=0,
+        max_tokens=4000
     )
     
-    tools = [get_first_3_github_jobs, scrape_job_posting, match_job_to_resume, explain_job_match]
+    tools = [get_first_3_github_jobs, scrape_job_posting, match_job_to_resume, explain_job_match, match_job_to_resume_by_url]
     
     agent = create_agent(
         llm,
         tools,
         system_prompt = """You are an intelligent job recommendation assistant.
+
             Your workflow:
-            1. Get jobs using get_first_3_github_jobs() - Unless the user specifically types in a url link, use that one instead and do not call get_first_3_github_jobs() just scrape the details of the job link and explain using explain_job_match()
+            1. Get jobs using get_first_3_github_jobs() 
+            - EXCEPTION: If the user provides a specific URL, skip this step and only analyze that one job
+            
             2. For each job:
-            a. Scrape details from the link in each job with scrape_job_posting()
-            b. Calculate match with match_job_to_resume()
-            3. Sort by match_score
-            4. For top 3 jobs (score > 50):
+            a. Use scrape_job_posting(url) to scrape and cache the full job description
+            b. Use match_job_to_resume_by_url(url, resume_id) to match it against the resume
+                IMPORTANT: This tool automatically uses the full cached description from step 2a
+            c. Store the match results for ranking
+            
+            3. Sort jobs by match_score (highest to lowest)
+
+            4. For the top 3 jobs with score > 50:
             - Use explain_job_match() to generate personalized explanations
+            
             5. Present recommendations with:
             - Company and title
-            - Match score
-            - Detailed explanation
-            - Application link
+            - Match score percentage
+            - Detailed explanation of why it's a good/moderate fit
+            - Direct application link
 
-            Show your reasoning as you work through the jobs.
-            IMPORTANT: If a tool returns an error, acknowledge it briefly and move on to the next job. 
-            Don't let one failed job stop the entire analysis."""
+            CRITICAL RULES:
+            - Always call scrape_job_posting() BEFORE match_job_to_resume_by_url() for each job
+            - Pass the job URL (not the description text) to match_job_to_resume_by_url()
+            - If a tool returns an error, acknowledge it briefly and continue with remaining jobs
+            - Show your reasoning as you analyze each job
+
+            Error Handling:
+            If scraping fails → Note it and skip matching for that job
+            If matching fails → Note the error but still present the job with "Unable to calculate match"
+            Never stop the entire analysis due to one job failure"""
     )
     
     return agent

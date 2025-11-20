@@ -1,6 +1,7 @@
 "use client"
-import {Github, Code2} from 'lucide-react';
+import { Github, Code2, FileUp, Search } from 'lucide-react'; // Added FileUp and Search
 import { useState } from 'react';
+import Link from 'next/link';
 
 const MockAppVisualization = () => {
   const [isHovered, setIsHovered] = useState(false);
@@ -104,13 +105,19 @@ export default function Hero() {
                     </p>
                   
                     <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                        <button className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-500/25">
-                        <Github size={20} />
-                        Connect GitHub
-                        </button>
-                        <button className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-8 py-3.5 rounded-xl font-semibold transition-all">
-                        Upload Resume
-                        </button>
+                        <Link href="/upload-resume">
+                          <button className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-500/25 cursor-pointer">
+                            <FileUp size={20} />
+                            Upload Resume
+                          </button>
+                        </Link>
+
+                        <a href="https://github.com/SimplifyJobs/Summer2026-Internships" target="_blank">
+                          <button className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-8 py-3.5 rounded-xl font-semibold transition-all cursor-pointer">
+                            <Search size={20} />
+                            Browse Jobs
+                          </button>
+                        </a>
                     </div>
                   </div>
 

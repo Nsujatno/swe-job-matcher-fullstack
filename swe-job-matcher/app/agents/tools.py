@@ -1,6 +1,8 @@
 import requests
 import asyncio
 import re
+import nest_asyncio
+import json
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from bs4 import BeautifulSoup
@@ -10,6 +12,9 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.agents import create_agent
 from typing import List, Dict
+
+# allows crawl4ai to work with fastapi
+nest_asyncio.apply()
 
 GITHUB_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/README.md"
 
@@ -192,32 +197,33 @@ def create_job_agent():
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, max_tokens=5000)
     tools = [get_github_jobs, scrape_job_posting, match_resume_to_job]
     
-    system_prompt="""
-    You are a precision Job Hunter. You have access to a user's resume and a list of tools.
+    system_prompt=system_prompt="""
+    You are a precision Job Hunter.
     
     YOUR WORKFLOW:
-    1. Receive the user's resume and request.
-    2. Fetch a list of jobs using `get_github_jobs`.
-    3. For each job found (Limit to top 3):
-       a. Scrape the full text using `scrape_job_posting`.
-       b. Match it against the resume using `match_resume_to_job`.
-          - IMPORTANT: You must pass the FULL text of the user's resume to this tool.
+    1. Fetch top 3 jobs using `get_github_jobs`.
+    2. For each job:
+       a. Scrape text using `scrape_job_posting`.
+       b. Match against resume using `match_resume_to_job`.
     
-    4. FINAL OUTPUT REPORT:
-    Present the findings in a clean, readable format. 
-    For each job, you MUST use the "evidence" field returned by the matching tool.
+    CRITICAL FINAL OUTPUT FORMAT:
+    You must output a valid JSON string containing a list of the matches.
+    Do not output markdown. Do not output conversational text. Just the JSON list.
     
-    Format:
-    ## [Company Name] - [Role Title] (Score: X/100)
-    [Link to Apply]
-    **Why it fits:**
-    - [Evidence 1 from tool response]
-    - [Evidence 2 from tool response]
-    
-    **Missing:**
-    - [Missing Skills from tool response]
-    
-    Do not use generic summaries. Use the specific project names and details provided by the tools.
+    Example Output structure:
+    [
+      {
+        "company": "Company Name",
+        "role": "Job Title",
+        "link": "Application URL",
+        "match_details": {
+            "score": 85,
+            "reason": "...",
+            "evidence": ["..."],
+            "missing_skills": ["..."]
+        }
+      }
+    ]
     """
 
     agent = create_agent(
@@ -228,103 +234,66 @@ def create_job_agent():
     
     return agent
 
-def main():
-    MY_RESUME = """
-    Nathan Sujatno 
-    210-629-2920 | Nathan.sujatno@gmail.com | Richardson, TX 
-    github.com/Nsujatno|linkedin.com/in/nathan-sujatno 
-    EDUCATION               
-    The University of Texas at Dallas, Richardson, TX                                                                             
-    Bachelor of Science, Computer Science                                                                                                                                     
-    ● Honors & Awards: Academic Excellence Scholar, Hobson Wildenthal Honors College 
-    May 2027  
-    GPA: 3.8 
-    SKILLS                
-    Technical Skills: Python, C++, JavaScript, Java | Frameworks: React, Node.js, Express.js, FastAPI, Tailwind CSS | Cloud & 
-    Tools: AWS (Lambda, API Gateway, S3, SageMaker), Git, Postman, MongoDB, Supabase 
-    EXPERIENCE                
-    NRVE intern, Remote                                                                        
-    June 2025 – August 2025 
-    Backend Project Lead, Frontend Developer           
-    ● Architected and deployed a serverless backend on AWS (Lambda, API Gateway, S3) and MongoDB, building 
-    scalable RESTful API endpoints in Python. 
-    ● Cut database query latency by over 95% by implementing a caching solution with AWS and Cloudflare. 
-    ● Contributed to frontend UI development and implemented the full integration layer between backend services 
-    and the mobile application. 
-    PROJECTS                
-    MeteorMate                   
-    June 2025 – Current 
-    ● Developed a responsive user interface with React.js and Next.js, creating a library of reusable components and 
-    leveraging Tailwind CSS for rapid, utility-first styling and a consistent user experience. 
-    ● Architected a serverless backend using Firebase for authentication and Supabase, providing secure and scalable 
-    RESTful endpoints. 
-    Intellect Ink                                  
-    February 2025 – May 2025 
-    ● Developed a micro-learning app using the MERN tech stack (Express.js, Node.js, MongoDB). 
-    ● Developed and integrated RESTful API endpoints with the frontend to produce books, articles, new, poems, and 
-    research papers. 
-    Kanban Sync, HackUTD                                                                                                                                                
-    November 2025  
-     Built the backend for an AI-powered workflow assistant used in datacenter operations, enabling natural
-    language task creation and validation. 
-     Implemented a FastAPI service layer integrated with Supabase for authentication, data storage, and vector 
-    embeddings for similarity search. 
-     Developed a dual-RAG retrieval pipeline using OpenAI GPT-4o-mini and Ada embeddings to validate instructions 
-    against datacenter manuals. 
-    LEADERSHIP & ORGANIZATIONS            
-    AI MD                                                  
-    September 2025 – Current 
-    Project Manager 
-    ● Leading a student team in developing a full-stack MERN app that utilizes a custom-trained AI model. 
-    ● Managed project timelines, delegated tasks, and mentored team members in a collaborative environment. 
-    ACM, Officer                                                                                                                                                             
-    May 2025 – Current 
-    ACM TIP (Technical Interview Prep)                                                                                                        
-    ACM, Member                                                                                                                                              
-    September 2025 – Current 
-    February 2025 – May 2025 
-    """
-
-    query = f"""
-    Find the latest software engineering internships from the GitHub list.
-    Here is my resume:
-    {MY_RESUME}
-    """
-
-    # call ai agent and allow thought process
+async def find_and_match_jobs(resume_text: str) -> List[Dict]:
     agent_executor = create_job_agent()
 
-    final_response = None
+    query = f"""
+    Find the latest software engineering internships.
+    Here is my resume:
+    {resume_text}
+    
+    IMPORTANT: Return ONLY a valid JSON array. No markdown, no extra text.
+    """
 
-    for event in agent_executor.stream(
-        {"messages": [{"role": "user", "content": query}]},
-        stream_mode="updates"
-    ):
-        for node_name, data in event.items():
-            print(f"node: {node_name}")
-            print("="*20)
-            if "messages" in data and data["messages"]:
-                last_message = data["messages"][-1]
-
-                final_response = data
-
-                # check if tool call
-                if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                    print("Agent decided to call tools:")
-
-                    for tool_call in last_message.tool_calls:
-                        print(f"   - Tool: {tool_call['name']}")
-
-    print("final report\n")
-    if final_response and "messages" in final_response:
-        # last message contains result
-        final_message = final_response["messages"][-1]
-        if hasattr(final_message, "content"):
-            print(final_message.content)
+    try:
+        # Use ainvoke to get the result
+        result = await agent_executor.ainvoke({
+            "messages": [{"role": "user", "content": query}]
+        })
+        
+        if "messages" in result and len(result["messages"]) > 0:
+            last_message = result["messages"][-1]
+            
+            # Extract content from the message
+            if hasattr(last_message, "content"):
+                output_str = last_message.content
+            else:
+                output_str = str(last_message)
         else:
-            print("No final content found")
-    else:
-        print("No result captured")
+            raise ValueError("No messages in agent response")
+        
+        # Clean the output string
+        output_str = output_str.replace("``````", "").strip()
+        
+        # Parse JSON
+        matches = json.loads(output_str)
+        return matches
 
-if __name__ == "__main__":
-    main()
+    except json.JSONDecodeError as e:
+        print(f"JSON Parse Error: {e}")
+        print(f"Raw output: {output_str[:500]}")
+        return [{
+            "company": "Error",
+            "role": "Invalid JSON Response",
+            "link": "#",
+            "match_details": {
+                "score": 0, 
+                "reason": f"Agent returned invalid JSON: {str(e)}", 
+                "evidence": [], 
+                "missing_skills": []
+            }
+        }]
+    
+    except Exception as e:
+        print(f"Agent Execution Error: {e}")
+        return [{
+            "company": "Error",
+            "role": "Agent Failed",
+            "link": "#",
+            "match_details": {
+                "score": 0, 
+                "reason": str(e), 
+                "evidence": [], 
+                "missing_skills": []
+            }
+        }]

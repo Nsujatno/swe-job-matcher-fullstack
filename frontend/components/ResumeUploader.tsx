@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, DragEvent } from "react";
+import { useState, useRef, ChangeEvent, DragEvent, useEffect } from "react";
 import {
 	UploadCloud,
 	FileText,
@@ -8,10 +8,28 @@ import {
 	CheckCircle,
 	AlertCircle,
 	Loader2,
+	Search,
 } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
+import JobResultCard from "./JobResultCard";
 
-type UploadStatus = "idle" | "uploading" | "success" | "error";
+// --- Types ---
+export interface MatchDetails {
+	score: number;
+	reason: string;
+	evidence: string[];
+	missing_skills: string[];
+}
+
+export interface JobMatch {
+	company: string;
+	role: string;
+	location: string;
+	link: string;
+	match_details: MatchDetails;
+}
+
+type UploadStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
 
 export default function ResumeUploader() {
 	const { getToken } = useAuth();
@@ -19,6 +37,7 @@ export default function ResumeUploader() {
 	const [isDragging, setIsDragging] = useState(false);
 	const [status, setStatus] = useState<UploadStatus>("idle");
 	const [errorMessage, setErrorMessage] = useState<string>("");
+	const [matches, setMatches] = useState<JobMatch[]>([]);
 
 	// hidden input reference
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +45,8 @@ export default function ResumeUploader() {
 	// Configuration
 	const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 	const ALLOWED_TYPES = ["application/pdf"];
+
+	// --- Helpers ---
 
 	const validateFile = (file: File): boolean => {
 		if (!ALLOWED_TYPES.includes(file.type)) {
@@ -44,10 +65,56 @@ export default function ResumeUploader() {
 	const handleFileSelect = (selectedFile: File) => {
 		setErrorMessage("");
 		setStatus("idle");
-
 		if (validateFile(selectedFile)) {
 			setFile(selectedFile);
 		}
+	};
+
+	const resetState = () => {
+		setFile(null);
+		setMatches([]);
+		setStatus("idle");
+		setErrorMessage("");
+		if (fileInputRef.current) fileInputRef.current.value = "";
+	};
+
+	// --- Polling Logic ---
+
+	const pollForResults = async () => {
+		// Switch status to analyzing so the UI shows we are waiting for AI
+		setStatus("analyzing");
+
+		const interval = setInterval(async () => {
+			try {
+				const freshToken = await getToken();
+
+				if (!freshToken) {
+					console.log("No token available");
+					return;
+				}
+				const res = await fetch("http://localhost:8000/api/resume-status", {
+					headers: { Authorization: `Bearer ${freshToken}` },
+				});
+
+				if (!res.ok) return; // standard retry if network blip
+
+				const data = await res.json();
+
+				if (data.status === "completed") {
+					clearInterval(interval);
+					setMatches(data.matches);
+					setStatus("success");
+				} else if (data.status === "failed") {
+					clearInterval(interval);
+					setErrorMessage("AI Analysis failed. Please try again.");
+					setStatus("error");
+				}
+				// If status is "processing" or "pending", we do nothing and wait for next loop
+			} catch (err) {
+				console.error("Polling error", err);
+				// Don't clear interval immediately on network error, allow retries
+			}
+		}, 5000); // Check every 5
 	};
 
 	// --- Event Handlers ---
@@ -65,11 +132,8 @@ export default function ResumeUploader() {
 	const onDrop = (e: DragEvent<HTMLDivElement>) => {
 		e.preventDefault();
 		setIsDragging(false);
-
 		if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
 			handleFileSelect(e.dataTransfer.files[0]);
-			// Reset input value so same file can be selected again if needed
-			if (fileInputRef.current) fileInputRef.current.value = "";
 		}
 	};
 
@@ -79,45 +143,65 @@ export default function ResumeUploader() {
 		}
 	};
 
-	const handleRemoveFile = () => {
-		setFile(null);
-		setStatus("idle");
-		setErrorMessage("");
-	};
-
 	const handleUpload = async () => {
 		if (!file) return;
-
 		setStatus("uploading");
 
-		// --- TODO: CONNECT TO YOUR BACKEND HERE ---
 		try {
 			const token = await getToken();
+
+			if (!token) {
+				setErrorMessage("Please sign in first.");
+				setStatus("error");
+				return;
+			}
+
 			const formData = new FormData();
-			formData.append("file", file);
+			formData.append("file", file); // Make sure backend expects 'file'
+
 			const response = await fetch("http://localhost:8000/api/upload-resume", {
 				method: "POST",
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
+				headers: { Authorization: `Bearer ${token}` },
 				body: formData,
 			});
-			if (response.status == 401) {
-				setErrorMessage("Make sure to sign in first");
-			}
+
 			if (!response.ok) {
 				throw new Error("Failed to upload resume");
 			}
-			setStatus("success");
+
+			// Upload successful, now start polling for AI results
+			await pollForResults();
 		} catch (error) {
 			console.error(error);
 			setStatus("error");
-			if (!errorMessage) {
-				setErrorMessage("Something went wrong uploading your resume.");
-			}
+			setErrorMessage("Something went wrong uploading your resume.");
 		}
 	};
 
+	// --- View 1: The Results List (Show this when we have matches) ---
+	if (status === "success" && matches.length > 0) {
+		return (
+			<div className="w-full max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+				<div className="flex items-center justify-between mb-8">
+					<h2 className="text-3xl font-bold text-white">Top Matches for You</h2>
+					<button
+						onClick={resetState}
+						className="text-sm text-slate-400 hover:text-white underline"
+					>
+						Upload different resume
+					</button>
+				</div>
+
+				<div className="grid gap-6">
+					{matches.map((job, index) => (
+						<JobResultCard key={index} job={job} />
+					))}
+				</div>
+			</div>
+		);
+	}
+
+	// --- View 2: The Upload Box (Default) ---
 	return (
 		<div className="w-full max-w-xl mx-auto">
 			{/* Drop Zone */}
@@ -176,11 +260,12 @@ export default function ResumeUploader() {
 							</div>
 						</div>
 
-						{status !== "uploading" && status !== "success" && (
+						{/* Only show Remove X if not currently processing */}
+						{status !== "uploading" && status !== "analyzing" && (
 							<button
 								onClick={(e) => {
 									e.stopPropagation();
-									handleRemoveFile();
+									resetState();
 								}}
 								className="p-1.5 hover:bg-slate-600 rounded-full text-slate-400 hover:text-white transition-colors"
 							>
@@ -199,40 +284,45 @@ export default function ResumeUploader() {
 				</div>
 			)}
 
-			{/* Action Button */}
-			{file && status !== "success" && (
+			{/* Action Button / Loading State */}
+			{file && (
 				<button
 					onClick={handleUpload}
-					disabled={status === "uploading"}
+					disabled={status === "uploading" || status === "analyzing"}
 					className={`
             mt-6 w-full py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2
             ${
-													status === "uploading"
+													status === "uploading" || status === "analyzing"
 														? "bg-slate-700 text-slate-300 cursor-not-allowed"
 														: "bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25"
 												}
           `}
 				>
-					{status === "uploading" ? (
+					{status === "uploading" && (
 						<>
 							<Loader2 size={20} className="animate-spin" />
-							Analyzing Resume...
+							Uploading PDF...
 						</>
-					) : (
-						"Upload your resume!"
 					)}
+
+					{status === "analyzing" && (
+						<>
+							<Search size={20} className="animate-pulse" />
+							Scanning Jobs & Matching...
+						</>
+					)}
+
+					{status === "idle" && "Run Job Matcher"}
+					{status === "error" && "Try Again"}
 				</button>
 			)}
 
-			{/* Success State */}
-			{status === "success" && (
-				<div className="mt-6 bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex flex-col items-center text-center animate-in fade-in slide-in-from-bottom-2">
-					<div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 mb-3">
-						<CheckCircle size={24} />
-					</div>
-					<h3 className="text-white font-semibold">Resume Uploaded!</h3>
-					<p className="text-emerald-200/70 text-sm mt-1">
-						We are currently scanning the Github repo for matches...
+			{/* Info Text during Analysis */}
+			{status === "analyzing" && (
+				<div className="mt-4 text-center animate-in fade-in">
+					<p className="text-slate-400 text-sm">
+						This usually takes about 30 seconds. <br />
+						We are scraping live data from GitHub.
 					</p>
 				</div>
 			)}

@@ -12,12 +12,11 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.agents import create_agent
 from typing import List, Dict
+from app.config import jobs_cache_collection 
+from datetime import datetime
 
 # allows crawl4ai to work with fastapi
 nest_asyncio.apply()
-
-# dict to store scraped info
-SCRAPE_CACHE: Dict[str, str] = {}
 
 GITHUB_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/README.md"
 
@@ -132,16 +131,22 @@ async def _crawl_async(url: str) -> str:
 
 @tool(description="Scrapes a job posting based on a url to get its relevant info such as description, requirements, benefits, etc")
 def scrape_job_posting(url: str) -> str:
-    if url in SCRAPE_CACHE:
-        print(f"CACHE HIT: Fetching {url} from memory.")
-        return SCRAPE_CACHE[url]
+    cached_job = jobs_cache_collection.find_one({"_id": url})
+    
+    if cached_job:
+        print(f"CACHE HIT (DB): Fetching {url} from MongoDB.")
+        return cached_job["markdown"]
 
     print(f"CACHE MISS: Scraping {url}...")
     try:
         raw_markdown = asyncio.run(_crawl_async(url))
         cleaned_text = _clean_job_description(raw_markdown)
 
-        SCRAPE_CACHE[url] = cleaned_text
+        jobs_cache_collection.insert_one({
+            "_id": url,
+            "markdown": cleaned_text,
+            "created_at": datetime.now()
+        })
         return cleaned_text
         
     except Exception as e:

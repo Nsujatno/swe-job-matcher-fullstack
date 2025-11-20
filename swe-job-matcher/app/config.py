@@ -21,6 +21,7 @@ try:
     db = client[settings.mongo_db_name]
     resumes_collection = db["resumes"]
     users_collection = db["users"]
+    jobs_cache_collection = db["jobs_cache"]
     
     print("Connected to MongoDB")
 

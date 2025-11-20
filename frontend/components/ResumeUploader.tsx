@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, DragEvent, useEffect } from "react";
+import { useState, useRef, ChangeEvent, DragEvent } from "react";
 import {
 	UploadCloud,
 	FileText,
@@ -43,10 +43,8 @@ export default function ResumeUploader() {
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// Configuration
-	const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+	const MAX_FILE_SIZE = 5 * 1024 * 1024;
 	const ALLOWED_TYPES = ["application/pdf"];
-
-	// --- Helpers ---
 
 	const validateFile = (file: File): boolean => {
 		if (!ALLOWED_TYPES.includes(file.type)) {
@@ -78,10 +76,7 @@ export default function ResumeUploader() {
 		if (fileInputRef.current) fileInputRef.current.value = "";
 	};
 
-	// --- Polling Logic ---
-
 	const pollForResults = async () => {
-		// Switch status to analyzing so the UI shows we are waiting for AI
 		setStatus("analyzing");
 
 		const interval = setInterval(async () => {
@@ -96,7 +91,7 @@ export default function ResumeUploader() {
 					headers: { Authorization: `Bearer ${freshToken}` },
 				});
 
-				if (!res.ok) return; // standard retry if network blip
+				if (!res.ok) return;
 
 				const data = await res.json();
 
@@ -109,15 +104,11 @@ export default function ResumeUploader() {
 					setErrorMessage("AI Analysis failed. Please try again.");
 					setStatus("error");
 				}
-				// If status is "processing" or "pending", we do nothing and wait for next loop
 			} catch (err) {
 				console.error("Polling error", err);
-				// Don't clear interval immediately on network error, allow retries
 			}
-		}, 5000); // Check every 5
+		}, 2000); // Poll every 2 seconds
 	};
-
-	// --- Event Handlers ---
 
 	const onDragOver = (e: DragEvent<HTMLDivElement>) => {
 		e.preventDefault();
@@ -157,7 +148,7 @@ export default function ResumeUploader() {
 			}
 
 			const formData = new FormData();
-			formData.append("file", file); // Make sure backend expects 'file'
+			formData.append("file", file);
 
 			const response = await fetch("http://localhost:8000/api/upload-resume", {
 				method: "POST",
@@ -169,7 +160,6 @@ export default function ResumeUploader() {
 				throw new Error("Failed to upload resume");
 			}
 
-			// Upload successful, now start polling for AI results
 			await pollForResults();
 		} catch (error) {
 			console.error(error);
@@ -178,21 +168,30 @@ export default function ResumeUploader() {
 		}
 	};
 
-	// --- View 1: The Results List (Show this when we have matches) ---
+	// --- SUCCESS VIEW (Matches List) ---
 	if (status === "success" && matches.length > 0) {
 		return (
-			<div className="w-full max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
-				<div className="flex items-center justify-between mb-8">
-					<h2 className="text-3xl font-bold text-white">Top Matches for You</h2>
+			// Added pt-4 and pb-20 to ensure spacing from header and bottom
+			<div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-700 pt-4 pb-20">
+				{/* Header Section */}
+				<div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
+					<div>
+						<h2 className="text-3xl font-bold text-white">Top Matches for You</h2>
+						<p className="text-slate-400 text-sm mt-1">
+							Based on your specific skills and projects.
+						</p>
+					</div>
+
 					<button
 						onClick={resetState}
-						className="text-sm text-slate-400 hover:text-white underline"
+						className="text-sm text-slate-400 hover:text-white underline bg-slate-800/50 px-4 py-2 rounded-lg hover:bg-slate-800 transition-all"
 					>
 						Upload different resume
 					</button>
 				</div>
 
-				<div className="grid gap-6">
+				{/* Cards List - Vertical Stack */}
+				<div className="flex flex-col gap-6">
 					{matches.map((job, index) => (
 						<JobResultCard key={index} job={job} />
 					))}
@@ -201,10 +200,18 @@ export default function ResumeUploader() {
 		);
 	}
 
-	// --- View 2: The Upload Box (Default) ---
+	// --- UPLOAD VIEW ---
 	return (
 		<div className="w-full max-w-xl mx-auto">
-			{/* Drop Zone */}
+			{/* Header Text for Upload Screen */}
+			<div className="text-center mb-10">
+				<h1 className="text-4xl font-bold text-white mb-4">Upload Your Resume</h1>
+				<p className="text-slate-400">
+					Upload your CV to start matching with the latest <br />
+					2026 Summer Internships.
+				</p>
+			</div>
+
 			<div
 				className={`
           relative border-2 border-dashed rounded-2xl p-8 transition-all duration-300 ease-in-out text-center cursor-pointer
@@ -228,7 +235,6 @@ export default function ResumeUploader() {
 					onChange={onFileInputChange}
 				/>
 
-				{/* IDLE STATE: No file selected */}
 				{!file && (
 					<div className="space-y-4">
 						<div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto text-indigo-400">
@@ -243,7 +249,6 @@ export default function ResumeUploader() {
 					</div>
 				)}
 
-				{/* SELECTED STATE: File is present */}
 				{file && (
 					<div className="flex items-center justify-between bg-slate-700/50 p-4 rounded-xl border border-slate-600">
 						<div className="flex items-center gap-3 overflow-hidden">
@@ -260,7 +265,6 @@ export default function ResumeUploader() {
 							</div>
 						</div>
 
-						{/* Only show Remove X if not currently processing */}
 						{status !== "uploading" && status !== "analyzing" && (
 							<button
 								onClick={(e) => {
@@ -276,7 +280,6 @@ export default function ResumeUploader() {
 				)}
 			</div>
 
-			{/* Error Message */}
 			{errorMessage && (
 				<div className="flex items-center gap-2 mt-4 text-red-400 bg-red-400/10 p-3 rounded-lg text-sm border border-red-400/20">
 					<AlertCircle size={16} />
@@ -284,7 +287,6 @@ export default function ResumeUploader() {
 				</div>
 			)}
 
-			{/* Action Button / Loading State */}
 			{file && (
 				<button
 					onClick={handleUpload}
@@ -317,11 +319,10 @@ export default function ResumeUploader() {
 				</button>
 			)}
 
-			{/* Info Text during Analysis */}
 			{status === "analyzing" && (
 				<div className="mt-4 text-center animate-in fade-in">
 					<p className="text-slate-400 text-sm">
-						This usually takes about 30 seconds. <br />
+						This usually takes about 1-2 minutes. <br />
 						We are scraping live data from GitHub.
 					</p>
 				</div>

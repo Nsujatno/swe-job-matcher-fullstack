@@ -16,6 +16,9 @@ from typing import List, Dict
 # allows crawl4ai to work with fastapi
 nest_asyncio.apply()
 
+# dict to store scraped info
+SCRAPE_CACHE: Dict[str, str] = {}
+
 GITHUB_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/README.md"
 
 NOISE_PATTERNS = [
@@ -50,6 +53,7 @@ def get_github_jobs(limit: int=3) -> List[Dict]:
         for row in rows:
             if len(jobs) >= limit:
                 break
+                
             cells = row.find_all("td")
             # check if any rows are bad
             if len(cells) < 4:
@@ -57,16 +61,16 @@ def get_github_jobs(limit: int=3) -> List[Dict]:
             
             raw_company = cells[0].get_text(strip=True)
             
-            # use previous company for arrow
-            if '↳' in raw_company or not raw_company:
-                company = last_company
-            else:
-                company = raw_company
-                last_company = company
-            
-            # skip if company name is empty
-            if not company:
+            # Skip rows with the arrow icon (sub-listings)
+            if '↳' in raw_company:
                 continue
+            
+            # Skip if company name is empty
+            if not raw_company:
+                continue
+            
+            # Set the company name
+            company = raw_company
 
             # extract the role
             role = cells[1].get_text(strip=True)
@@ -86,10 +90,13 @@ def get_github_jobs(limit: int=3) -> List[Dict]:
                 "role": role,
                 "location": location,
                 "link": link
-                })
+            })
+            
         return jobs
+        
     except Exception as e:
         return [{"Error": f"Failed to fetch jobs: {str(e)}"}]
+
 
 # cleans up the markdown file by removing any unneccesary info
 def _clean_job_description(markdown_text: str) -> str:    
@@ -125,9 +132,16 @@ async def _crawl_async(url: str) -> str:
 
 @tool(description="Scrapes a job posting based on a url to get its relevant info such as description, requirements, benefits, etc")
 def scrape_job_posting(url: str) -> str:
+    if url in SCRAPE_CACHE:
+        print(f"CACHE HIT: Fetching {url} from memory.")
+        return SCRAPE_CACHE[url]
+
+    print(f"CACHE MISS: Scraping {url}...")
     try:
         raw_markdown = asyncio.run(_crawl_async(url))
         cleaned_text = _clean_job_description(raw_markdown)
+
+        SCRAPE_CACHE[url] = cleaned_text
         return cleaned_text
         
     except Exception as e:
@@ -135,42 +149,57 @@ def scrape_job_posting(url: str) -> str:
 
 @tool(description="Matches a resume to a job description using AI analysis")
 def match_resume_to_job(job_description: str, resume_text: str) -> Dict:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     prompt = ChatPromptTemplate.from_template(
         """
-        You are a strict technical recruiter. Analyze the match between the Resume and Job Description.
-        SCORING GUIDE (be specific and differentiate):
-        90-100: Exceptional fit - candidate exceeds multiple key requirements with relevant projects
-        75-89: Strong fit - candidate meets most requirements with clear evidence
-        60-74: Moderate fit - candidate meets some requirements but has gaps
-        40-59: Weak fit - candidate has transferable skills but missing key requirements
-        0-39: Poor fit - minimal overlap with requirements
+        You are a Cynical Engineering Manager. You are skeptical of resumes and strictly evaluate candidates based on PROVEN experience, not just keyword mentions.
         
+        YOUR GOAL: Find the gaps. Do not gloss over missing skills.
+        
+        CRITICAL RULES FOR SCORING:
+        1. **Experience Level Match (Crucial):**
+           - If the Job is "Senior/Lead" and the Resume is "Student/Intern" -> INSTANT FAIL (Score < 50).
+           - Even if they have the keywords (React, Python), a student cannot lead a senior team.
+           - If Job is "Internship", judge based on potential and project complexity.
+
+        2. **Professional vs. Academic:**
+           - Professional Experience > Personal Projects > Class Projects.
+           - If a job asks for "Production Experience" and the candidate only has "Personal Projects", deduct points.
+
+        3. **Technical Equivalencies (Keep this):**
+           - Tailwind = CSS (Match)
+           - Supabase = SQL/Database (Match)
+           - Git = GitHub (Match)
+        
+        4. **Scoring Rubric (Be Harsh):**
+           - 100: Impossible (Reserved for perfection).
+           - 90-99: "Unicorn" Candidate. Exceeds requirements, has live production apps with users, perfectly matches stack.
+           - 80-89: Strong Match. Meets all MUST-HAVES. Maybe misses a "Nice-to-have".
+           - 70-79: Good Match. Meets core tech but lacks specific domain knowledge or depth.
+           - 60-69: Okay. Has the language (e.g., Python) but wrong framework or context.
+           - < 60: Mismatch. Junior applying for Senior, or completely different stack.
+
         JOB DESCRIPTION:
         {job_description}
         
         CANDIDATE RESUME:
         {resume_text}
         
-        STRICT INSTRUCTION:
-        You must prove your match score by citing SPECIFIC projects, roles, or tools from the resume. 
-        Do not just say "Candidate has experience." Say "Candidate used [Tool] in [Project Name]."
+        INSTRUCTIONS FOR EVIDENCE:
+        - Cite the specific project type (Internship vs Project). 
+        - Example: "Job requires AWS -> Candidate used AWS in 'NRVE' (Internship) to build serverless backend." (Strong Evidence)
+        - Example: "Job requires AWS -> Candidate used AWS in 'MeteorMate' (Personal Project)." (Weaker Evidence)
         
-        EXAMPLE OF GOOD EVIDENCE:
-        "Job requires React -> Candidate used React in 'MeteorMate' project to build the dashboard."
-        "Job requires Cloud -> Candidate deployed 'Safe Speak' app using Firebase."
-
         OUTPUT JSON ONLY:
         {{
             "score": <int 0-100>,
-            "reason": "<Summary of fit. Mention the candidate's actual specific project names here.>",
+            "reason": "Candidate matches [Seniority Level]. Strongest match is [Skill], weakest area is [Gap].",
             "evidence": [
-                "<Specific Requirement 1> -> <Specific Proof from Resume>",
-                "<Specific Requirement 2> -> <Specific Proof from Resume>",
-                "<Specific Requirement 3> -> <Specific Proof from Resume>"
+                "Job requires [Req] -> Match: [Evidence]",
+                "Job requires [Req] -> Match: [Evidence]"
             ],
-            "missing_skills": ["<skill1>", "<skill2>"]
+            "missing_skills": ["<List Gaps Here>"]
         }}
         """
     )
@@ -198,30 +227,27 @@ def create_job_agent():
     tools = [get_github_jobs, scrape_job_posting, match_resume_to_job]
     
     system_prompt=system_prompt="""
-    You are a precision Job Hunter.
+    You are a specialized Job Fetching Agent.
     
     YOUR WORKFLOW:
-    1. Fetch top 3 jobs using `get_github_jobs`.
-    2. For each job:
-       a. Scrape text using `scrape_job_posting`.
-       b. Match against resume using `match_resume_to_job`.
+    1. Call `get_github_jobs` to get the top 3 links.
+    2. For EACH job found:
+       a. Call `scrape_job_posting` to get the full text.
+       b. Call `match_resume_to_job` passing the FULL job text and FULL resume text.
     
-    CRITICAL FINAL OUTPUT FORMAT:
-    You must output a valid JSON string containing a list of the matches.
-    Do not output markdown. Do not output conversational text. Just the JSON list.
+    CRITICAL OUTPUT RULES:
+    1. You represent the final API response. You must output a VALID JSON ARRAY.
+    2. Do NOT include markdown formatting like ```json ... ```.
+    3. Do NOT add conversational filler like "Here are your results".
+    4. Just output the raw list.
     
-    Example Output structure:
+    Example Final Output:
     [
       {
-        "company": "Company Name",
-        "role": "Job Title",
-        "link": "Application URL",
-        "match_details": {
-            "score": 85,
-            "reason": "...",
-            "evidence": ["..."],
-            "missing_skills": ["..."]
-        }
+        "company": "Google",
+        "role": "Software Engineer",
+        "link": "...",
+        "match_details": { ... result from match tool ... }
       }
     ]
     """

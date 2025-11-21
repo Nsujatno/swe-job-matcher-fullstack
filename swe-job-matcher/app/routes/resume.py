@@ -96,4 +96,9 @@ async def process_resume_background(user_id: str, resume_text: str, resume_id: s
         print(f"AI Agent finished for user {user_id}")
 
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={e})
+        print(f"ERROR in Background Task: {e}")
+        # Save failure results so frontend stops spinning
+        resumes_collection.update_one(
+            {"_id": resume_id}, 
+            {"$set": {"status": "failed", "error": str(e)}}
+        )

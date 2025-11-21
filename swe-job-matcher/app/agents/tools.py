@@ -28,7 +28,6 @@ NOISE_PATTERNS = [
     re.compile(r'Follow Us.*', re.IGNORECASE),
 ]
 
-@tool(description="This tool gets a certain amount of jobs from the github summer 2026 internships repo")
 def get_github_jobs(limit: int=3) -> List[Dict]:
     try:
         r = requests.get(GITHUB_URL, timeout=10)
@@ -129,7 +128,6 @@ async def _crawl_async(url: str) -> str:
         else:
             return f"Error scraping page: {result.error_message}"
 
-@tool(description="Scrapes a job posting based on a url to get its relevant info such as description, requirements, benefits, etc")
 def scrape_job_posting(url: str) -> str:
     cached_job = jobs_cache_collection.find_one({"_id": url})
     
@@ -152,7 +150,6 @@ def scrape_job_posting(url: str) -> str:
     except Exception as e:
         return f"Error scraping job posting: {str(e)}"
 
-@tool(description="Matches a resume to a job description using AI analysis")
 def match_resume_to_job(job_description: str, resume_text: str) -> Dict:
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
@@ -265,66 +262,56 @@ def create_job_agent():
     
     return agent
 
-async def find_and_match_jobs(resume_text: str) -> List[Dict]:
-    agent_executor = create_job_agent()
-
-    query = f"""
-    Find the latest software engineering internships.
-    Here is my resume:
-    {resume_text}
-    
-    IMPORTANT: Return ONLY a valid JSON array. No markdown, no extra text.
-    """
-
+# helper function to process one job
+async def process_single_job(job: Dict, resume_text: str) -> Dict:
     try:
-        # Use ainvoke to get the result
-        result = await agent_executor.ainvoke({
-            "messages": [{"role": "user", "content": query}]
-        })
-        
-        if "messages" in result and len(result["messages"]) > 0:
-            last_message = result["messages"][-1]
-            
-            # Extract content from the message
-            if hasattr(last_message, "content"):
-                output_str = last_message.content
-            else:
-                output_str = str(last_message)
-        else:
-            raise ValueError("No messages in agent response")
-        
-        # Clean the output string
-        output_str = output_str.replace("``````", "").strip()
-        
-        # Parse JSON
-        matches = json.loads(output_str)
-        return matches
+        company = job.get("company")
+        role = job.get("role")
+        link = job.get("link")
 
-    except json.JSONDecodeError as e:
-        print(f"JSON Parse Error: {e}")
-        print(f"Raw output: {output_str[:500]}")
-        return [{
-            "company": "Error",
-            "role": "Invalid JSON Response",
-            "link": "#",
-            "match_details": {
-                "score": 0, 
-                "reason": f"Agent returned invalid JSON: {str(e)}", 
-                "evidence": [], 
-                "missing_skills": []
-            }
-        }]
+        # in mongodb
+        if link and link != "No link":
+            description = await asyncio.to_thread(scrape_job_posting, link)
+        else:
+            description = "No link provided, cannot analyze."
+        
+        match_result = await asyncio.to_thread(
+            match_resume_to_job,
+            description,
+            resume_text
+        )
+
+        return {
+            "company": company,
+            "role": role,
+            "link": link,
+            "match_details": match_result
+        }
     
     except Exception as e:
-        print(f"Agent Execution Error: {e}")
-        return [{
-            "company": "Error",
-            "role": "Agent Failed",
-            "link": "#",
+        print(f"Error processing {job.get('company')}: {e}")
+        return {
+            "company": job.get("company", "Unknown"),
+            "role": job.get("role", "Unknown"),
+            "link": job.get("link", "#"),
             "match_details": {
                 "score": 0, 
-                "reason": str(e), 
+                "reason": "Error during processing", 
                 "evidence": [], 
                 "missing_skills": []
             }
-        }]
+        }
+    
+async def find_and_match_jobs(resume_text: str) -> List[Dict]:
+    jobs = get_github_jobs(limit=3)
+
+    if not jobs or "Error" in jobs[0]:
+        print("Failed to fetch jobs list.")
+        return []
+    
+    tasks = []
+    for job in jobs:
+        tasks.append(process_single_job(job, resume_text))
+
+    results = await asyncio.gather(*tasks)
+    return results

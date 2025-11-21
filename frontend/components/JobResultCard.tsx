@@ -7,6 +7,8 @@ import {
 	AlertTriangle,
 	ChevronDown,
 	ChevronUp,
+	Globe,
+	Sparkles,
 } from "lucide-react";
 import { JobMatch } from "./RecommendationList";
 
@@ -18,7 +20,13 @@ const getScoreColor = (score: number) => {
 	return "text-red-400 border-red-500/30 bg-red-500/10";
 };
 
-export default function JobResultCard({ job }: { job: JobMatch }) {
+export default function JobResultCard({
+	job,
+	research,
+}: {
+	job: JobMatch;
+	research?: any;
+}) {
 	const [isExpanded, setIsExpanded] = useState(false);
 	const { company, role, link, match_details } = job;
 	const scoreColorClass = getScoreColor(match_details.score);
@@ -113,6 +121,45 @@ export default function JobResultCard({ job }: { job: JobMatch }) {
 										{skill}
 									</span>
 								))}
+							</div>
+						</div>
+					)}
+
+					{research && (
+						<div className="bg-indigo-500/10 rounded-lg p-4 border border-indigo-500/20 relative overflow-hidden">
+							{/* Decorative gradient behind */}
+							<div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+
+							<h4 className="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+								<Sparkles size={14} /> Agent Research: {company}
+							</h4>
+
+							<div className="space-y-3">
+								{Array.isArray(research) ? (
+									research.slice(0, 2).map((item: any, i: number) => (
+										<div
+											key={i}
+											className="flex gap-3 items-start bg-slate-900/50 p-3 rounded border border-indigo-500/10"
+										>
+											<Globe size={16} className="text-indigo-400 shrink-0 mt-0.5" />
+											<div>
+												<p className="text-sm text-slate-200 leading-relaxed">
+													{item.content?.slice(0, 150)}...
+												</p>
+												<a
+													href={item.url}
+													target="_blank"
+													className="text-xs text-indigo-400 hover:text-indigo-300 mt-1 inline-block"
+												>
+													Read Source &rarr;
+												</a>
+											</div>
+										</div>
+									))
+								) : (
+									// Fallback if research is just a string
+									<p className="text-sm text-slate-300">{JSON.stringify(research)}</p>
+								)}
 							</div>
 						</div>
 					)}

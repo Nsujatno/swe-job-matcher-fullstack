@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.agents import create_agent
+from langchain_community.tools import TavilySearchResults
 from typing import List, Dict
 from app.config import jobs_cache_collection 
 from datetime import datetime
@@ -315,3 +316,12 @@ async def find_and_match_jobs(resume_text: str) -> List[Dict]:
 
     results = await asyncio.gather(*tasks)
     return results
+
+@tool(description="Scans the github repo, scrapes the top jobs, and matches them against the resume. Returns a list of job matches with scores.")
+async def scan_for_jobs(resume_text: str):
+    return await find_and_match_jobs(resume_text)
+
+@tool(description="Searches for recent news, engineering blog posts, and financial health of a specific company")
+def research_company(company_name: str):
+    search = TavilySearchResults(max_results=3)
+    return search.invoke(f"{company_name} engineering culture recent news")

@@ -26,6 +26,7 @@ export default function RecommendationList() {
 	const [jobs, setJobs] = useState<JobMatch[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
+	const [research, setResearch] = useState<Record<string, any>>({});
 
 	useEffect(() => {
 		const fetchJobs = async () => {
@@ -48,6 +49,7 @@ export default function RecommendationList() {
 
 				if (data.status === "completed" && data.matches) {
 					setJobs(data.matches);
+					setResearch(data.research);
 				}
 			} catch (err) {
 				console.error(err);
@@ -101,7 +103,7 @@ export default function RecommendationList() {
 	return (
 		<div className="flex flex-col gap-6 max-w-4xl mx-auto">
 			{jobs.map((job, index) => (
-				<JobResultCard key={index} job={job} />
+				<JobResultCard key={index} job={job} research={research[job.company]} />
 			))}
 		</div>
 	);

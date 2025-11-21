@@ -7,6 +7,7 @@ from typing import Dict
 
 from app.routes.auth import get_user_id
 from app.agents.tools import find_and_match_jobs
+from app.agents.graph import app as agent_graph
 
 router = APIRouter()
 
@@ -24,6 +25,7 @@ async def get_resume_status(user_id: str = Depends(get_user_id)):
         "filename": resume.get("filename"),
         "status": resume.get("status", "pending"),
         "matches": resume.get("matches", []),
+        "research": resume.get("research", {}),
         "uploaded_at": resume.get("uploaded_at")
     }
 
@@ -70,7 +72,7 @@ def read_pdf_plumber(file_bytes):
     return text
 
 async def process_resume_background(user_id: str, resume_text: str, resume_id: str):
-    print(f"Starting AI Agent for user {user_id}...")
+    print(f"Starting ai analysis for user {user_id}...")
     
     try:
         resumes_collection.update_one(
@@ -78,9 +80,15 @@ async def process_resume_background(user_id: str, resume_text: str, resume_id: s
             {"$set": {"status": "processing"}}
         )
 
-        # --- CALL THE AGENT ---
-        # This runs your crawl4ai -> scrape -> LLM logic
-        matches = await find_and_match_jobs(resume_text)
+        initial_state = {"resume_text": resume_text}
+
+        # invoke graph
+        final_state = await agent_graph.ainvoke(initial_state)
+
+        matches = final_state.get("matches", [])
+
+        research_notes = final_state.get("research_notes", {})
+        print(f"Graph Finished. Research collected for: {list(research_notes.keys())}")
         
         # Save the actual results to MongoDB
         resumes_collection.update_one(
@@ -89,6 +97,7 @@ async def process_resume_background(user_id: str, resume_text: str, resume_id: s
                 "$set": {
                     "status": "completed", 
                     "matches": matches,
+                    "research": research_notes,
                     "completed_at": datetime.utcnow()
                 }
             }

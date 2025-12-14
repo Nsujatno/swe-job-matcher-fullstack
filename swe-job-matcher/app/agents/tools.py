@@ -320,8 +320,3 @@ async def find_and_match_jobs(resume_text: str) -> List[Dict]:
 @tool(description="Scans the github repo, scrapes the top jobs, and matches them against the resume. Returns a list of job matches with scores.")
 async def scan_for_jobs(resume_text: str):
     return await find_and_match_jobs(resume_text)
-
-@tool(description="Searches for recent news, engineering blog posts, and financial health of a specific company")
-def research_company(company_name: str):
-    search = TavilySearchResults(max_results=3)
-    return search.invoke(f"{company_name} engineering culture recent news")

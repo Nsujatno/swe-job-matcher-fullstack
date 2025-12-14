@@ -128,7 +128,7 @@ export default function Hero() {
 								</button>
 							</Link>
 
-							<Link href="https://github.com/SimplifyJobs/Summer2026-Internships" target="_blank">
+							<Link href="/github-jobs">
 								<button className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-8 py-3.5 rounded-xl font-semibold transition-all cursor-pointer">
 									<Search size={20} />
 									Browse Jobs

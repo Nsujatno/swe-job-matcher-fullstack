@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.config import settings
-from app.routes import resume, auth
+from app.routes import resume, auth, github_jobs
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -15,6 +15,7 @@ app.add_middleware(
 
 app.include_router(resume.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(github_jobs.router, prefix="/api")
 
 @app.get("/api/health")
 def health_check():
